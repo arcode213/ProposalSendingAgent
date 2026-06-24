@@ -1,0 +1,15 @@
+# Keep the image small and never bake secrets/local state into it
+.git
+.gitignore
+__pycache__/
+*.py[oc]
+.env
+.env.*
+!.env.example
+outreach.db
+*.pdf
+.claude/
+render.yaml
+DEPLOY.md
+README.md
+run.bat

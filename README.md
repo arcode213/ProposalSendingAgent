@@ -36,11 +36,9 @@ From the **`ProposalSendingAgent`** folder:
 
 ```powershell
 # easiest — double-click run.bat, OR from a terminal:
-uv run python app.py
+pip install -r requirements.txt
+python app.py
 ```
-
-(If you don't use `uv`, the project's virtualenv is at `..\.venv`:
-`..\.venv\Scripts\python.exe app.py`)
 
 Then open **<http://127.0.0.1:5000>** in your browser.
 
