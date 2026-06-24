@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · RoamDigi Proposal Agent</title>
+<style>
+  :root{ --bg:#0f1623; --panel:#16213a; --panel2:#1d2b48; --line:#2a3b5e;
+         --txt:#e8edf6; --muted:#93a2bd; --accent:#1a73e8; --accent2:#34c3a0; --err:#ef5b5b; }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       font-family:Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:30px 28px;width:340px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+  h1{font-size:19px;margin:0 0 2px}
+  .tag{color:var(--accent2);font-size:12px;font-style:italic;margin-bottom:20px}
+  label{display:block;font-size:12px;color:var(--muted);margin:14px 0 4px}
+  input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+        border-radius:7px;padding:9px 11px;font-size:14px}
+  input:focus{outline:none;border-color:var(--accent)}
+  button{width:100%;margin-top:22px;cursor:pointer;border:none;border-radius:7px;
+         padding:11px;font-size:14px;font-weight:600;color:#fff;background:var(--accent)}
+  button:hover{background:#1765c8}
+  .err{background:#3a1717;border:1px solid var(--err);color:#ffb4b4;font-size:13px;
+       border-radius:7px;padding:9px 11px;margin-top:16px}
+</style>
+</head>
+<body>
+  <form class="card" method="POST" autocomplete="off">
+    <h1>RoamDigi <span style="color:var(--muted)">Proposal Agent</span></h1>
+    <div class="tag">Travel Smart, stay connected</div>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <label>Username</label>
+    <input name="username" autofocus required>
+    <label>Password</label>
+    <input name="password" type="password" required>
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>

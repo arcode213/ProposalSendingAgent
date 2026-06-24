@@ -1,0 +1,11 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local database / state
+outreach.db
+
+# Python
+__pycache__/
+*.py[oc]

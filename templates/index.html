@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoamDigi · Proposal Sending Agent</title>
+<style>
+  :root{
+    --bg:#0f1623; --panel:#16213a; --panel2:#1d2b48; --line:#2a3b5e;
+    --txt:#e8edf6; --muted:#93a2bd; --accent:#1a73e8; --accent2:#34c3a0;
+    --warn:#f0a93b; --err:#ef5b5b; --ok:#3ecf8e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:linear-gradient(90deg,#0d2a4a,#0f1623);padding:14px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .tag{color:var(--accent2);font-size:12px;font-style:italic}
+  .wrap{display:grid;grid-template-columns:340px 1fr;gap:0;height:calc(100vh - 53px)}
+  .side{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:16px}
+  .main{overflow:auto;padding:16px 20px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:18px 0 8px}
+  h2:first-child{margin-top:0}
+  label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:7px 9px;font-size:13px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  button{cursor:pointer;border:none;border-radius:6px;padding:8px 13px;font-size:13px;font-weight:600;color:#fff;background:var(--accent)}
+  button.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--txt)}
+  button.green{background:var(--accent2)}
+  button.warn{background:var(--warn);color:#1a1407}
+  button.red{background:var(--err)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  .card .n{font-size:24px;font-weight:700}
+  .card .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .s-idle{background:#33415c;color:#cdd9ef} .s-running{background:#143b2b;color:var(--ok)}
+  .s-paused{background:#3a3014;color:var(--warn)} .s-stopping{background:#3a1717;color:var(--err)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:16px}
+  .panel h3{margin:0 0 10px;font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;z-index:1}
+  td.edit{cursor:text;border-bottom:1px dashed var(--line)}
+  tr.sel{background:#13294a}
+  .st{font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px}
+  .st.pending{background:#33415c;color:#cdd9ef}.st.sent{background:#143b2b;color:var(--ok)}
+  .st.failed{background:#3a1717;color:var(--err)}.st.skipped{background:#2a2a2a;color:#999}
+  .tablewrap{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .preview{background:#fff;color:#202124;border-radius:8px;padding:18px;font-size:14px;line-height:1.5;max-height:46vh;overflow:auto}
+  .preview .subj{font-weight:700;font-size:15px;border-bottom:1px solid #e3e3e3;padding-bottom:8px;margin-bottom:12px}
+  .log{background:#0a1019;border:1px solid var(--line);border-radius:8px;padding:10px;height:160px;overflow:auto;font-family:Consolas,monospace;font-size:12px}
+  .log .li{padding:1px 0;color:#9fb0cc}.log .error{color:var(--err)}.log .warn{color:var(--warn)}.log .info{color:#8fd0b3}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  .flag{color:var(--warn);font-size:12px;margin-top:6px}
+  .toast{position:fixed;bottom:18px;right:18px;background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--accent2);padding:12px 16px;border-radius:8px;max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s}
+  .toast.show{opacity:1;transform:none}.toast.err{border-left-color:var(--err)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{background:var(--panel2);color:var(--muted);font-weight:600}
+  .tabs button.active{background:var(--accent);color:#fff}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>RoamDigi <span class="muted">Proposal Sending Agent</span></h1>
+  <span class="tag">Travel Smart, stay connected</span>
+  <span style="margin-left:auto" class="pill s-idle" id="statusPill">idle</span>
+  <a href="/logout" style="color:var(--muted);font-size:12px;text-decoration:none;border:1px solid var(--line);padding:4px 10px;border-radius:6px">Sign out</a>
+</header>
+
+<div class="wrap">
+  <!-- ============ SIDEBAR : SETTINGS ============ -->
+  <aside class="side">
+    <h2>Email account 🔒</h2>
+    <div class="small muted" style="margin:-4px 0 6px">Locked — set via <code>.env</code> / Vercel environment variables.</div>
+    <label>SMTP login</label>
+    <input id="smtp_user" placeholder="login@smtp-brevo.com">
+    <label>SMTP key / password</label>
+    <input id="smtp_pass" type="password" placeholder="••••••••">
+    <label>Reply-To</label>
+    <input id="reply_to" placeholder="you@yourdomain.com">
+
+    <h2>Your details (fills the email)</h2>
+    <div class="small muted" style="margin:-4px 0 6px">Name &amp; Title are locked 🔒 (from <code>.env</code>). The rest below is editable.</div>
+    <label>Your Name <span class="muted">[Your Name]</span></label>
+    <input id="sender_name" placeholder="e.g. Ayman Khan">
+    <label>Your Title <span class="muted">[Title]</span></label>
+    <input id="title" placeholder="e.g. Partnerships Lead">
+    <div class="row">
+      <div><label>Commission % <span class="muted">[X]</span></label><input id="commission" placeholder="15"></div>
+      <div><label>Greeting fallback</label><input id="greeting_fallback" placeholder="there"></div>
+    </div>
+    <label>Partner-commission phrase <span class="muted">(Draft 2)</span></label>
+    <input id="partner_commission" placeholder="partner commission program">
+    <label>App Store link <span class="muted">(optional)</span></label>
+    <input id="app_store_url" placeholder="https://apps.apple.com/...">
+    <label>Google Play link <span class="muted">(optional)</span></label>
+    <input id="play_store_url" placeholder="https://play.google.com/...">
+
+    <h2>Sending</h2>
+    <label>Proposal draft</label>
+    <select id="draft_id"></select>
+    <div class="row">
+      <div><label>Gap between sends (sec)</label><input id="gap_seconds" type="number" min="5"></div>
+      <div><label>Daily cap</label><input id="daily_cap" type="number" min="1"></div>
+    </div>
+
+    <div class="btnrow">
+      <button class="green" id="saveBtn">Save settings</button>
+    </div>
+    <div id="readyFlags"></div>
+
+    <h2>Test</h2>
+    <label>Send a test email to</label>
+    <input id="testTo" placeholder="defaults to your Gmail">
+    <div class="btnrow"><button class="ghost" id="testBtn">Send test email</button></div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="cards">
+      <div class="card"><div class="n" id="c_total">0</div><div class="l">Agencies</div></div>
+      <div class="card"><div class="n" id="c_included">0</div><div class="l">Included</div></div>
+      <div class="card"><div class="n" style="color:var(--ok)" id="c_sent">0</div><div class="l">Sent</div></div>
+      <div class="card"><div class="n" style="color:var(--err)" id="c_failed">0</div><div class="l">Failed</div></div>
+      <div class="card"><div class="n" id="c_pending">0</div><div class="l">Pending</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Campaign controls</h3>
+      <div class="small muted" id="ctrlInfo">Sending <span id="todayCount">0</span> today · current: <span id="currentEmail">—</span></div>
+      <div class="btnrow">
+        <button class="green" id="startBtn">▶ Start auto-send</button>
+        <button class="warn" id="pauseBtn">⏸ Pause</button>
+        <button class="green" id="resumeBtn">▶ Resume</button>
+        <button class="red" id="stopBtn">⏹ Stop</button>
+        <button class="ghost" id="nextBtn">Send next (manual)</button>
+        <button class="ghost" id="resetFailedBtn">Reset failed → pending</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="recipients" class="active">Recipients</button>
+      <button data-tab="preview">Preview</button>
+      <button data-tab="log">Activity log</button>
+    </div>
+
+    <!-- recipients tab -->
+    <section id="tab-recipients">
+      <div class="row" style="margin-bottom:10px;max-width:560px">
+        <input id="search" placeholder="Search name / email / city…">
+        <select id="statusFilter" style="max-width:160px">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="sent">Sent</option>
+          <option value="failed">Failed</option>
+          <option value="skipped">Skipped</option>
+        </select>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>On</th><th>Agency (click to edit)</th><th>First name</th>
+            <th>Email</th><th>City</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody id="rtbody"></tbody>
+        </table>
+      </div>
+      <div class="small muted" style="margin-top:6px">Click a row to preview its email · click Agency / First name / Email cells to edit · toggle “On” to include/exclude.</div>
+    </section>
+
+    <!-- preview tab -->
+    <section id="tab-preview" style="display:none">
+      <div class="panel">
+        <div class="small muted">Previewing draft <b id="pvDraft"></b> for <b id="pvAgency">sample</b> → <span id="pvTo"></span></div>
+        <div id="pvFlags"></div>
+        <div class="preview" style="margin-top:12px">
+          <div class="subj" id="pvSubj"></div>
+          <div id="pvBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- log tab -->
+    <section id="tab-log" style="display:none">
+      <div class="log" id="logBox"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const SETTING_KEYS = ["smtp_user","smtp_pass","reply_to","sender_name","title","commission",
+  "greeting_fallback","partner_commission","app_store_url","play_store_url","draft_id","gap_seconds","daily_cap"];
+let selectedRid = null;
+let drafts = [];
+
+function toast(msg, isErr){
+  const t=$("toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":"");
+  setTimeout(()=>t.className="toast",3500);
+}
+async function api(path, method="GET", body){
+  const opt={method,headers:{"Content-Type":"application/json"}};
+  if(body) opt.body=JSON.stringify(body);
+  const r=await fetch(path,opt);
+  if(r.status===401){ window.location="/login"; throw new Error("auth"); }
+  return r.json();
+}
+
+// ---- settings ----
+let lockedKeys=[];
+function fillSettings(s){
+  SETTING_KEYS.forEach(k=>{ if($(k) && document.activeElement!==$(k)) $(k).value = s[k] ?? ""; });
+}
+function applyLocks(){
+  lockedKeys.forEach(k=>{
+    const el=$(k); if(!el) return;
+    el.readOnly=true; el.tabIndex=-1;
+    el.style.opacity=".7"; el.style.cursor="not-allowed";
+    el.title="Locked — configured via .env / Vercel environment variables";
+  });
+}
+async function saveSettings(){
+  const body={};
+  SETTING_KEYS.forEach(k=>{ if($(k)) body[k]=$(k).value; });
+  if(body.smtp_pass==="********") delete body.smtp_pass;
+  await api("/api/settings","POST",body);
+  toast("Settings saved.");
+  refreshState(); refreshPreview();
+}
+$("saveBtn").onclick=saveSettings;
+
+// ---- state ----
+let settingsFilled=false;
+async function refreshState(fillForm=false){
+  const st=await api("/api/state");
+  drafts=st.drafts;
+  const sel=$("draft_id");
+  if(sel.options.length!==drafts.length){
+    sel.innerHTML=drafts.map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+  }
+  // Only populate the settings inputs on first load (or explicit request).
+  // The 2.5s status poll must NOT do this, or it overwrites whatever you're typing.
+  if(fillForm || !settingsFilled){
+    lockedKeys=st.locked||[];
+    fillSettings(st.settings);
+    applyLocks();
+    settingsFilled=true;
+  }
+  const pill=$("statusPill"); pill.textContent=st.status; pill.className="pill s-"+st.status;
+  $("c_total").textContent=st.counts.total;
+  $("c_included").textContent=st.counts.included;
+  $("c_sent").textContent=st.counts.sent;
+  $("c_failed").textContent=st.counts.failed;
+  $("c_pending").textContent=st.counts.pending;
+  $("todayCount").textContent=st.counts.sent_today;
+  $("currentEmail").textContent=st.current||"—";
+  // ready flags
+  const f=$("readyFlags");
+  f.innerHTML = st.ready_problems.length
+    ? st.ready_problems.map(p=>`<div class="flag">⚠ ${p}</div>`).join("")
+    : `<div class="flag" style="color:var(--ok)">✓ Ready to send</div>`;
+  // button enable/disable
+  const run=st.status==="running", paused=st.status==="paused";
+  $("startBtn").disabled = run || paused || st.ready_problems.length>0;
+  $("pauseBtn").disabled = !run;
+  $("resumeBtn").disabled = !paused;
+  $("stopBtn").disabled = !(run||paused);
+  $("nextBtn").disabled = run;
+}
+
+// ---- recipients ----
+let rcache=[];
+async function refreshRecipients(){
+  // Don't rebuild the table while a cell is being edited — it would wipe the edit.
+  if($("rtbody").querySelector("input")) return;
+  const q=encodeURIComponent($("search").value);
+  const sfx=$("statusFilter").value;
+  rcache=await api(`/api/recipients?q=${q}&status=${sfx}`);
+  const tb=$("rtbody");
+  tb.innerHTML=rcache.map(r=>`
+    <tr data-id="${r.id}" class="${r.id===selectedRid?'sel':''}">
+      <td class="muted">${r.id}</td>
+      <td><input type="checkbox" ${r.included?'checked':''} onclick="event.stopPropagation()" onchange="toggleInc(${r.id},this.checked)"></td>
+      <td class="edit" data-f="agency_name">${esc(r.agency_name||'')}</td>
+      <td class="edit" data-f="first_name">${esc(r.first_name||'')||'<span class=muted>—</span>'}</td>
+      <td class="edit" data-f="email">${esc(r.email||'')}</td>
+      <td class="muted">${esc(r.city||'')}</td>
+      <td><span class="st ${r.status}">${r.status}</span>${r.error?` <span class="muted small" title="${esc(r.error)}">⚠</span>`:''}</td>
+      <td>${r.status!=='pending'?`<button class="ghost small" onclick="event.stopPropagation();resetRow(${r.id})" style="padding:3px 8px">↺</button>`:''}</td>
+    </tr>`).join("");
+  tb.querySelectorAll("tr").forEach(tr=>{
+    tr.onclick=()=>{ selectedRid=+tr.dataset.id; refreshPreview(); switchTab('preview'); markSel(); };
+    tr.querySelectorAll("td.edit").forEach(td=>{
+      td.ondblclick=null;
+      td.onclick=(e)=>{ e.stopPropagation(); startEdit(td,+tr.dataset.id); };
+    });
+  });
+}
+function markSel(){ document.querySelectorAll("#rtbody tr").forEach(tr=>tr.classList.toggle("sel",+tr.dataset.id===selectedRid)); }
+function esc(s){return (s+"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function startEdit(td,id){
+  if(td.querySelector("input")) return;
+  const field=td.dataset.f; const old=td.textContent==="—"?"":td.textContent;
+  td.innerHTML=`<input value="${esc(old)}" style="padding:3px 5px">`;
+  const inp=td.querySelector("input"); inp.focus(); inp.select();
+  const done=async(save)=>{
+    if(save && inp.value!==old){
+      await api(`/api/recipient/${id}`,"POST",{[field]:inp.value});
+      toast("Updated.");
+    }
+    refreshRecipients(); if(id===selectedRid) refreshPreview();
+  };
+  inp.onblur=()=>done(true);
+  inp.onkeydown=e=>{ if(e.key==="Enter")inp.blur(); if(e.key==="Escape")done(false); };
+}
+async function toggleInc(id,val){ await api(`/api/recipient/${id}`,"POST",{included:val?1:0}); refreshState(); }
+async function resetRow(id){ await api(`/api/recipient/${id}/reset`,"POST"); refreshRecipients(); refreshState(); }
+window.toggleInc=toggleInc; window.resetRow=resetRow;
+
+$("search").oninput=debounce(refreshRecipients,250);
+$("statusFilter").onchange=refreshRecipients;
+function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+
+// ---- preview ----
+async function refreshPreview(){
+  const p=await api("/api/preview","POST",{recipient_id:selectedRid,draft_id:$("draft_id").value});
+  const dname=(drafts.find(d=>d.id===$("draft_id").value)||{}).name||"";
+  $("pvDraft").textContent=dname;
+  $("pvAgency").textContent=p.agency||"sample";
+  $("pvTo").textContent=p.to||"";
+  $("pvSubj").textContent=p.subject;
+  $("pvBody").innerHTML=p.html;
+  $("pvFlags").innerHTML = (p.unresolved&&p.unresolved.length)
+    ? `<div class="flag">⚠ Unfilled placeholders: ${p.unresolved.join(", ")} — fill these in settings before sending.</div>` : "";
+}
+$("draft_id").onchange=()=>{ saveSettings(); };
+
+// ---- controls ----
+$("startBtn").onclick=async()=>{ const r=await api("/api/start","POST"); r.ok?toast("Campaign started."):toast(r.error,true); refreshState(); };
+$("pauseBtn").onclick=async()=>{ await api("/api/pause","POST"); refreshState(); };
+$("resumeBtn").onclick=async()=>{ await api("/api/resume","POST"); refreshState(); };
+$("stopBtn").onclick=async()=>{ await api("/api/stop","POST"); refreshState(); };
+$("nextBtn").onclick=async()=>{ const r=await api("/api/send_next","POST"); r.ok?toast("Sent to "+r.email):toast(r.error,true); refreshState(); refreshRecipients(); };
+$("resetFailedBtn").onclick=async()=>{ const r=await api("/api/reset_failed","POST"); toast(`Reset ${r.reset} failed → pending`); refreshState(); refreshRecipients(); };
+$("testBtn").onclick=async()=>{
+  $("testBtn").disabled=true; $("testBtn").textContent="Sending…";
+  const r=await api("/api/test","POST",{to:$("testTo").value});
+  $("testBtn").disabled=false; $("testBtn").textContent="Send test email";
+  r.ok?toast("Test sent to "+r.to):toast("Test failed: "+r.error,true);
+};
+
+// ---- log ----
+async function refreshLog(){
+  const rows=await api("/api/log?limit=80");
+  $("logBox").innerHTML=rows.map(r=>`<div class="li ${r.level}">[${r.ts}] ${esc(r.message)}</div>`).join("");
+  $("logBox").scrollTop=$("logBox").scrollHeight;
+}
+
+// ---- tabs ----
+function switchTab(name){
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
+  ["recipients","preview","log"].forEach(t=>$("tab-"+t).style.display=t===name?"":"none");
+  if(name==="preview") refreshPreview();
+  if(name==="log") refreshLog();
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+
+// ---- boot + polling ----
+async function boot(){
+  await refreshState(true);   // fill the settings form once, from saved values
+  await refreshRecipients();
+}
+boot();
+setInterval(()=>{ refreshState(); }, 2500);
+setInterval(()=>{
+  const active=$("statusPill").textContent;
+  if(active==="running"){ refreshRecipients(); if($("tab-log").style.display!=="none") refreshLog(); }
+}, 4000);
+</script>
+</body>
+</html>

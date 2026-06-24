@@ -1,0 +1,50 @@
+# Render Blueprint for the RoamDigi Proposal Sending Agent.
+# Deploy: push this repo to GitHub, then in Render → New → Blueprint, pick the repo.
+#
+# IMPORTANT:
+#   * ONE worker only. The app runs the email campaign in a background thread and
+#     keeps state in SQLite — multiple workers would double-send and corrupt state.
+#   * The disk keeps outreach.db (recipients, sent/failed status) across deploys/restarts.
+#   * Secrets are NOT in this file. Set them in the Render dashboard (sync: false below).
+services:
+  - type: web
+    name: roamdigi-proposal-agent
+    runtime: python
+    plan: starter            # Free plan sleeps & has no disk; Starter keeps it alive + allows a disk.
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    disk:
+      name: outreach-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /var/data/outreach.db
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: RENDER
+        value: "true"           # enables Secure session cookies (HTTPS-only)
+      # --- secrets: set these in the Render dashboard, not in git ---
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: REPLY_TO
+        sync: false
+      - key: SENDER_NAME
+        sync: false
+      - key: SENDER_TITLE
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: SECRET_KEY
+        sync: false
