@@ -774,6 +774,11 @@ def api_log():
 def bootstrap():
     init_db()
     import_recipients()
+    # Make the active send path obvious in the logs. If this says SMTP in
+    # production (e.g. Railway), BREVO_API_KEY is not set in the environment and
+    # SMTP sends will time out because the platform blocks outbound SMTP ports.
+    mode = "Brevo HTTP API (port 443)" if os.environ.get("BREVO_API_KEY", "").strip() else "SMTP"
+    log("info", f"Email send mode: {mode}")
 
 
 # Run setup at import time so it also works under a WSGI server (gunicorn),
