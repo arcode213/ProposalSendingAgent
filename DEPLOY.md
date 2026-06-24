@@ -41,6 +41,7 @@ Service → **Variables** → add these (same values as your local `.env`):
 |----------------------|-----------------------------------------|
 | `DB_PATH`            | `/data/outreach.db`                     |
 | `SECURE_COOKIES`     | `true`                                  |
+| `BREVO_API_KEY`      | *your Brevo **API** key (`xkeysib-…`)*  |
 | `SMTP_HOST`          | `smtp-relay.brevo.com`                  |
 | `SMTP_PORT`          | `587`                                   |
 | `SMTP_USER`          | `aa7a97001@smtp-brevo.com`              |
@@ -54,6 +55,13 @@ Service → **Variables** → add these (same values as your local `.env`):
 | `SECRET_KEY`         | *the long hex string from your `.env`*  |
 
 Do **not** set `PORT` — Railway injects it and the app binds to it automatically.
+
+> **Why `BREVO_API_KEY`?** Railway blocks outbound SMTP ports (25/465/587), so SMTP
+> sends time out (`TimeoutError`). When `BREVO_API_KEY` is set, the app sends via
+> Brevo's HTTP API over port 443 instead, which is never blocked. The `SMTP_*` vars
+> are still used for local development (where SMTP works). The API key is **different**
+> from the SMTP key: create it in Brevo → **SMTP & API → API Keys → Generate** — it
+> starts with `xkeysib-` (the SMTP key starts with `xsmtpsib-`).
 
 > Copy the **hash**, not the plaintext password, into `ADMIN_PASSWORD_HASH`.
 > To change the password later:

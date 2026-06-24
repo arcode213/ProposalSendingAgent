@@ -11,11 +11,14 @@ import os
 import re
 import sys
 import ssl
+import json
 import time
 import secrets
 import sqlite3
 import smtplib
 import threading
+import urllib.request
+import urllib.error
 from datetime import timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -340,6 +343,42 @@ class Sender:
             "sent_today": self.sent_today(),
         }
 
+    # ---- Brevo HTTP API (port 443) — used when BREVO_API_KEY is set ----
+    # Many hosts (e.g. Railway) block outbound SMTP ports (25/465/587), so SMTP
+    # sends time out. The Brevo transactional API goes over normal HTTPS (443),
+    # which is never blocked. This is preferred in production; SMTP is the fallback
+    # for local development.
+    def _send_via_brevo_api(self, api_key, from_email, sender_name, to_email,
+                            subject, text_body, html_body, reply_to):
+        payload = {
+            "sender": {"email": from_email, "name": sender_name or "RoamDigi"},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_body,
+            "textContent": text_body,
+        }
+        if reply_to:
+            payload["replyTo"] = {"email": reply_to}
+        req = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers={
+                "api-key": api_key,
+                "content-type": "application/json",
+                "accept": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp.read()
+            return True, ""
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")
+            return False, f"Brevo API {e.code}: {body}"
+        except Exception as e:
+            return False, f"{type(e).__name__}: {e}"
+
     # ---- core send of one message ----
     def send_one(self, recipient, settings):
         """Send to one recipient row (sqlite Row or dict). Returns (ok, error)."""
@@ -349,6 +388,16 @@ class Sender:
             return False, "Unresolved placeholders: " + ", ".join(rendered["unresolved"])
 
         from_email = (settings.get("from_email") or settings.get("smtp_user")).strip()
+
+        # Prefer the HTTP API when a key is configured (works where SMTP is blocked).
+        api_key = os.environ.get("BREVO_API_KEY", "").strip()
+        if api_key:
+            return self._send_via_brevo_api(
+                api_key, from_email, settings.get("sender_name"), rec["email"],
+                rendered["subject"], rendered["body"], rendered["html"],
+                settings.get("reply_to"),
+            )
+
         msg = MIMEMultipart("alternative")
         msg["Subject"] = rendered["subject"]
         msg["From"] = formataddr((settings.get("sender_name") or "RoamDigi", from_email))
