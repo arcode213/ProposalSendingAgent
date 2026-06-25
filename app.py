@@ -64,7 +64,10 @@ DEFAULT_SETTINGS = {
     **ENV_SETTINGS,
     "commission": "4",         # [X]%
     "partner_commission": "partner commission program",  # [partner commission]
-    "greeting_fallback": "there",
+    "greeting_fallback": "Sir/Madam",   # used in the formal auto-greeting
+    # Custom proposal composed at run time from the UI (used when draft_id=custom).
+    "custom_subject": "",
+    "custom_body": "",
     "app_store_url": "https://apps.apple.com/pk/app/roamdigi/id6758890011",
     "play_store_url": "https://play.google.com/store/apps/details?id=com.roamdigi",
     "draft_id": proposals.DEFAULT_DRAFT,
@@ -447,7 +450,34 @@ class Sender:
             problems.append("Your Name is required (used in the email body & signature).")
         if not settings.get("title"):
             problems.append("Your Title is required (used in the signature).")
+        if not (settings.get("custom_subject") or "").strip():
+            problems.append("Proposal subject is empty — write it in the Compose tab.")
+        if not (settings.get("custom_body") or "").strip():
+            problems.append("Proposal body is empty — write it in the Compose tab.")
         return problems
+
+    def send_to(self, rid):
+        """Send the proposal to one specific recipient now (synchronous)."""
+        with self.lock:
+            if self.status == "running":
+                return {"ok": False, "error": "Auto-send is running; pause it first."}
+        settings = get_settings()
+        problems = self.validate_ready(settings)
+        if problems:
+            return {"ok": False, "error": " ".join(problems)}
+        with db() as conn:
+            rec = conn.execute("SELECT * FROM recipients WHERE id=?", (rid,)).fetchone()
+        if not rec:
+            return {"ok": False, "error": "Recipient not found."}
+        if self.sent_today() >= int(settings.get("daily_cap") or 120):
+            return {"ok": False, "error": "Daily cap reached."}
+        self.current = rec["email"]
+        ok, err = self.send_one(rec, settings)
+        self._mark(rec["id"], "sent" if ok else "failed", err, settings.get("draft_id"))
+        self.current = None
+        log("info" if ok else "error",
+            f"{'Sent to ' + rec['agency_name'] + ' <' + rec['email'] + '>' if ok else 'FAILED ' + rec['email'] + ' — ' + err}")
+        return {"ok": ok, "email": rec["email"], "error": err}
 
     def send_next_manual(self):
         """Send exactly one pending email synchronously (manual mode)."""
@@ -632,7 +662,7 @@ def api_state():
         "current": sender.current,
         "counts": sender.counts(),
         "settings": safe,
-        "drafts": proposals.draft_list(),
+        "drafts": proposals.draft_list(s),
         "ready_problems": sender.validate_ready(s),
         "locked": sorted(LOCKED_KEYS),
     })
@@ -666,21 +696,83 @@ def api_recipients():
     return jsonify(rows)
 
 
+# Columns the UI is allowed to write on a recipient row.
+EDITABLE_RECIPIENT_FIELDS = (
+    "agency_name", "first_name", "email", "city", "contact",
+    "business_type", "reliability", "notes", "included",
+)
+
+
+@app.route("/api/recipient/add", methods=["POST"])
+def api_recipient_add():
+    """Create a new agency record from the UI."""
+    data = request.get_json(force=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "A valid email address is required."})
+    agency = proposals.clean_agency_name(data.get("agency_name") or "")
+    if not agency:
+        return jsonify({"ok": False, "error": "Agency name is required."})
+    first = (data.get("first_name") or "").strip() or proposals.first_name_from(agency, email)
+    with db() as conn:
+        exists = conn.execute("SELECT 1 FROM recipients WHERE email=?", (email,)).fetchone()
+        if exists:
+            return jsonify({"ok": False, "error": "An agency with that email already exists."})
+        included = 0 if data.get("included") in (0, "0", False) else 1
+        cur = conn.execute(
+            """INSERT INTO recipients
+               (agency_name, city, email, contact, business_type, reliability,
+                notes, first_name, included, status)
+               VALUES (?,?,?,?,?,?,?,?,?,'pending')""",
+            (agency, (data.get("city") or "").strip(), email,
+             (data.get("contact") or "").strip(), (data.get("business_type") or "").strip(),
+             (data.get("reliability") or "").strip(), (data.get("notes") or "").strip(),
+             first, included),
+        )
+        conn.commit()
+        rid = cur.lastrowid
+    log("info", f"Agency added: {agency} <{email}>")
+    return jsonify({"ok": True, "id": rid})
+
+
 @app.route("/api/recipient/<int:rid>", methods=["POST"])
 def api_recipient_update(rid):
     data = request.get_json(force=True) or {}
     fields = {}
-    for k in ("agency_name", "first_name", "email", "included"):
+    for k in EDITABLE_RECIPIENT_FIELDS:
         if k in data:
-            fields[k] = data[k]
+            if k == "agency_name":
+                fields[k] = proposals.clean_agency_name(data[k] or "")
+            elif k == "email":
+                em = (data[k] or "").strip().lower()
+                if not EMAIL_RE.match(em):
+                    return jsonify({"ok": False, "error": "Invalid email address."})
+                fields[k] = em
+            elif k == "included":
+                fields[k] = 1 if data[k] else 0
+            else:
+                fields[k] = (data[k] or "").strip() if isinstance(data[k], str) else data[k]
     if not fields:
         return jsonify({"ok": False, "error": "nothing to update"})
     sets = ", ".join(f"{k}=?" for k in fields)
     args = list(fields.values()) + [rid]
     with db() as conn:
-        conn.execute(f"UPDATE recipients SET {sets} WHERE id=?", args)
-        conn.commit()
+        try:
+            conn.execute(f"UPDATE recipients SET {sets} WHERE id=?", args)
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return jsonify({"ok": False, "error": "That email is already used by another agency."})
     return jsonify({"ok": True})
+
+
+@app.route("/api/recipient/<int:rid>/delete", methods=["POST"])
+def api_recipient_delete(rid):
+    with db() as conn:
+        cur = conn.execute("DELETE FROM recipients WHERE id=?", (rid,))
+        conn.commit()
+    if cur.rowcount:
+        log("info", f"Agency record #{rid} deleted.")
+    return jsonify({"ok": True, "deleted": cur.rowcount})
 
 
 @app.route("/api/recipient/<int:rid>/reset", methods=["POST"])
@@ -697,6 +789,12 @@ def api_reset_failed():
         cur = conn.execute("UPDATE recipients SET status='pending', error='' WHERE status='failed'")
         conn.commit()
     return jsonify({"ok": True, "reset": cur.rowcount})
+
+
+@app.route("/api/recipient/<int:rid>/send", methods=["POST"])
+def api_recipient_send(rid):
+    """Send the proposal to one specific recipient on demand."""
+    return jsonify(sender.send_to(rid))
 
 
 @app.route("/api/preview", methods=["POST"])
@@ -724,9 +822,15 @@ def api_test():
     problems = sender.validate_ready(s)
     if problems:
         return jsonify({"ok": False, "error": " ".join(problems)})
-    to = (data.get("to") or s.get("smtp_user") or "").strip()
+    # Default to a REAL mailbox. Never default to smtp_user — with Brevo that's a
+    # login like "xxxx@smtp-brevo.com" which is not a deliverable inbox, so the
+    # send "succeeds" but you never receive it.
+    to = (data.get("to") or s.get("reply_to") or s.get("from_email") or "").strip().lower()
     if not EMAIL_RE.match(to):
-        return jsonify({"ok": False, "error": "Invalid test recipient address."})
+        return jsonify({"ok": False, "error": "Enter a real email address to send the test to."})
+    if to.endswith("@smtp-brevo.com") or to.endswith("@smtp-relay.brevo.com"):
+        return jsonify({"ok": False, "error": "That's your Brevo SMTP login, not an inbox. "
+                                              "Enter a real address (e.g. your Gmail)."})
     rec = {
         "agency_name": data.get("agency") or "Your Test Agency",
         "first_name": "", "email": to,

@@ -62,6 +62,11 @@
   .tabs button{background:var(--panel2);color:var(--muted);font-weight:600}
   .tabs button.active{background:var(--accent);color:#fff}
   a{color:var(--accent)}
+  textarea{resize:vertical;min-height:80px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modalbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:580px;max-width:94vw;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modalbox h3{margin:0 0 12px}
+  .iconbtn{padding:3px 8px}
 </style>
 </head>
 <body>
@@ -102,8 +107,7 @@
     <input id="play_store_url" placeholder="https://play.google.com/...">
 
     <h2>Sending</h2>
-    <label>Proposal draft</label>
-    <select id="draft_id"></select>
+    <div class="small muted" style="margin:-4px 0 6px">Write the proposal in the <b>Compose proposal</b> tab — the agent formats it and adds a formal greeting.</div>
     <div class="row">
       <div><label>Gap between sends (sec)</label><input id="gap_seconds" type="number" min="5"></div>
       <div><label>Daily cap</label><input id="daily_cap" type="number" min="1"></div>
@@ -115,8 +119,8 @@
     <div id="readyFlags"></div>
 
     <h2>Test</h2>
-    <label>Send a test email to</label>
-    <input id="testTo" placeholder="defaults to your Gmail">
+    <label>Send a test email to <span class="muted">(a real inbox)</span></label>
+    <input id="testTo" placeholder="e.g. your@gmail.com">
     <div class="btnrow"><button class="ghost" id="testBtn">Send test email</button></div>
   </aside>
 
@@ -145,13 +149,14 @@
 
     <div class="tabs">
       <button data-tab="recipients" class="active">Recipients</button>
+      <button data-tab="compose">Compose proposal</button>
       <button data-tab="preview">Preview</button>
       <button data-tab="log">Activity log</button>
     </div>
 
     <!-- recipients tab -->
     <section id="tab-recipients">
-      <div class="row" style="margin-bottom:10px;max-width:560px">
+      <div class="row" style="margin-bottom:10px;max-width:760px;align-items:flex-end">
         <input id="search" placeholder="Search name / email / city…">
         <select id="statusFilter" style="max-width:160px">
           <option value="">All statuses</option>
@@ -160,6 +165,7 @@
           <option value="failed">Failed</option>
           <option value="skipped">Skipped</option>
         </select>
+        <button class="green" id="addAgencyBtn" style="max-width:150px;flex:0 0 auto">+ Add agency</button>
       </div>
       <div class="tablewrap">
         <table>
@@ -176,11 +182,34 @@
     <!-- preview tab -->
     <section id="tab-preview" style="display:none">
       <div class="panel">
-        <div class="small muted">Previewing draft <b id="pvDraft"></b> for <b id="pvAgency">sample</b> → <span id="pvTo"></span></div>
+        <div class="small muted">Previewing <b id="pvDraft">Composed proposal</b> for <b id="pvAgency">sample</b> → <span id="pvTo"></span></div>
         <div id="pvFlags"></div>
-        <div class="preview" style="margin-top:12px">
-          <div class="subj" id="pvSubj"></div>
-          <div id="pvBody"></div>
+        <div class="preview" style="margin-top:12px;padding:0;overflow:hidden">
+          <div class="subj" id="pvSubj" style="padding:14px 18px;margin:0"></div>
+          <iframe id="pvBody" title="Email preview" style="width:100%;border:0;display:block;min-height:620px;background:#eef2f7"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- compose tab -->
+    <section id="tab-compose" style="display:none">
+      <div class="panel">
+        <h3>Compose proposal</h3>
+        <div class="small muted" style="margin-bottom:8px">
+          Paste your email data below. The agent formats it into a clean, professional
+          email and adds a <b>formal greeting with the agency name</b> automatically —
+          don’t type a greeting here. Optional placeholders, filled per recipient at
+          send time:
+          <code>[Agency Name]</code> <code>[Your Name]</code> <code>[Title]</code>
+          <code>[X]</code> <code>[partner commission]</code> <code>[Mobile app line]</code>.
+        </div>
+        <label>Subject</label>
+        <input id="custom_subject" placeholder="e.g. A partnership opportunity for [Agency Name]">
+        <label>Body <span class="muted">(no greeting — the agent prepends it)</span></label>
+        <textarea id="custom_body" rows="16" placeholder="Paste the proposal text here…"></textarea>
+        <div class="btnrow">
+          <button class="green" id="saveComposeBtn">Save proposal</button>
+          <button class="ghost" id="previewComposeBtn">Preview</button>
         </div>
       </div>
     </section>
@@ -192,12 +221,43 @@
   </main>
 </div>
 
+<!-- add / edit agency modal -->
+<div class="modal" id="agencyModal" style="display:none">
+  <div class="modalbox">
+    <h3 id="amTitle">Add agency</h3>
+    <div class="row">
+      <div><label>Agency name *</label><input id="am_agency_name"></div>
+      <div><label>City</label><input id="am_city"></div>
+    </div>
+    <div class="row">
+      <div><label>Email *</label><input id="am_email" placeholder="contact@agency.com"></div>
+      <div><label>Contact / phone</label><input id="am_contact"></div>
+    </div>
+    <div class="row">
+      <div><label>First name <span class="muted">(for greeting)</span></label><input id="am_first_name"></div>
+      <div><label>Business type</label><input id="am_business_type"></div>
+    </div>
+    <div class="row">
+      <div><label>Reliability</label><input id="am_reliability"></div>
+      <div><label>Included in campaign</label>
+        <select id="am_included"><option value="1">Yes</option><option value="0">No</option></select></div>
+    </div>
+    <label>Notes</label><textarea id="am_notes" rows="2"></textarea>
+    <div id="amError" class="flag" style="color:var(--err)"></div>
+    <div class="btnrow">
+      <button class="green" id="amSave">Save</button>
+      <button class="ghost" id="amCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 const SETTING_KEYS = ["smtp_user","smtp_pass","reply_to","sender_name","title","commission",
-  "greeting_fallback","partner_commission","app_store_url","play_store_url","draft_id","gap_seconds","daily_cap"];
+  "greeting_fallback","partner_commission","app_store_url","play_store_url","gap_seconds","daily_cap",
+  "custom_subject","custom_body"];
 let selectedRid = null;
 let drafts = [];
 
@@ -241,10 +301,6 @@ let settingsFilled=false;
 async function refreshState(fillForm=false){
   const st=await api("/api/state");
   drafts=st.drafts;
-  const sel=$("draft_id");
-  if(sel.options.length!==drafts.length){
-    sel.innerHTML=drafts.map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
-  }
   // Only populate the settings inputs on first load (or explicit request).
   // The 2.5s status poll must NOT do this, or it overwrites whatever you're typing.
   if(fillForm || !settingsFilled){
@@ -293,7 +349,12 @@ async function refreshRecipients(){
       <td class="edit" data-f="email">${esc(r.email||'')}</td>
       <td class="muted">${esc(r.city||'')}</td>
       <td><span class="st ${r.status}">${r.status}</span>${r.error?` <span class="muted small" title="${esc(r.error)}">⚠</span>`:''}</td>
-      <td>${r.status!=='pending'?`<button class="ghost small" onclick="event.stopPropagation();resetRow(${r.id})" style="padding:3px 8px">↺</button>`:''}</td>
+      <td style="white-space:nowrap">
+        <button class="green small iconbtn" title="Send proposal to this agency now" onclick="event.stopPropagation();sendRow(${r.id})">✉</button>
+        <button class="ghost small iconbtn" title="Edit" onclick="event.stopPropagation();openAgencyModal(${r.id})">✎</button>
+        <button class="ghost small iconbtn" title="Delete" onclick="event.stopPropagation();deleteRow(${r.id})">🗑</button>
+        ${r.status!=='pending'?`<button class="ghost small iconbtn" title="Reset to pending" onclick="event.stopPropagation();resetRow(${r.id})">↺</button>`:''}
+      </td>
     </tr>`).join("");
   tb.querySelectorAll("tr").forEach(tr=>{
     tr.onclick=()=>{ selectedRid=+tr.dataset.id; refreshPreview(); switchTab('preview'); markSel(); };
@@ -323,7 +384,65 @@ function startEdit(td,id){
 }
 async function toggleInc(id,val){ await api(`/api/recipient/${id}`,"POST",{included:val?1:0}); refreshState(); }
 async function resetRow(id){ await api(`/api/recipient/${id}/reset`,"POST"); refreshRecipients(); refreshState(); }
+
+// ---- add / edit / delete agency ----
+const AGENCY_FIELDS=["agency_name","city","email","contact","first_name","business_type","reliability","notes"];
+let editingRid=null;
+function openAgencyModal(rid){
+  editingRid = rid || null;
+  $("amError").textContent="";
+  const r = rid ? (rcache.find(x=>x.id===rid)||{}) : {};
+  $("amTitle").textContent = rid ? `Edit agency #${rid}` : "Add agency";
+  AGENCY_FIELDS.forEach(f=>{ if($("am_"+f)) $("am_"+f).value = r[f] ?? ""; });
+  $("am_included").value = (rid ? (r.included?1:0) : 1);
+  $("agencyModal").style.display="flex";
+  $("am_agency_name").focus();
+}
+function closeAgencyModal(){ $("agencyModal").style.display="none"; editingRid=null; }
+async function saveAgency(){
+  const body={included:+$("am_included").value};
+  AGENCY_FIELDS.forEach(f=>{ if($("am_"+f)) body[f]=$("am_"+f).value.trim(); });
+  if(!body.agency_name){ $("amError").textContent="Agency name is required."; return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email)){ $("amError").textContent="A valid email is required."; return; }
+  const url = editingRid ? `/api/recipient/${editingRid}` : "/api/recipient/add";
+  const r = await api(url,"POST",body);
+  if(!r.ok){ $("amError").textContent=r.error||"Could not save."; return; }
+  closeAgencyModal();
+  toast(editingRid?"Agency updated.":"Agency added.");
+  refreshRecipients(); refreshState();
+}
+async function deleteRow(id){
+  const r=rcache.find(x=>x.id===id)||{};
+  if(!confirm(`Delete ${r.agency_name||"this agency"} (${r.email||""})? This cannot be undone.`)) return;
+  await api(`/api/recipient/${id}/delete`,"POST");
+  if(id===selectedRid) selectedRid=null;
+  toast("Agency deleted.");
+  refreshRecipients(); refreshState();
+}
+$("addAgencyBtn").onclick=()=>openAgencyModal(null);
+$("amSave").onclick=saveAgency;
+$("amCancel").onclick=closeAgencyModal;
+$("agencyModal").onclick=e=>{ if(e.target===$("agencyModal")) closeAgencyModal(); };
+
+// ---- compose custom proposal ----
+async function saveCompose(){
+  await api("/api/settings","POST",{custom_subject:$("custom_subject").value,custom_body:$("custom_body").value});
+  toast("Custom proposal saved.");
+  refreshState();
+}
+$("saveComposeBtn").onclick=saveCompose;
+$("previewComposeBtn").onclick=async()=>{ await saveCompose(); switchTab("preview"); };
+
+// ---- send to a single recipient ----
+async function sendRow(id){
+  const r=rcache.find(x=>x.id===id)||{};
+  if(!confirm(`Send the proposal now to ${r.agency_name||"this agency"} (${r.email||""})?`)) return;
+  const res=await api(`/api/recipient/${id}/send`,"POST");
+  res.ok?toast("Sent to "+res.email):toast(res.error||"Send failed",true);
+  refreshRecipients(); refreshState();
+}
 window.toggleInc=toggleInc; window.resetRow=resetRow;
+window.openAgencyModal=openAgencyModal; window.deleteRow=deleteRow; window.sendRow=sendRow;
 
 $("search").oninput=debounce(refreshRecipients,250);
 $("statusFilter").onchange=refreshRecipients;
@@ -331,17 +450,17 @@ function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>f
 
 // ---- preview ----
 async function refreshPreview(){
-  const p=await api("/api/preview","POST",{recipient_id:selectedRid,draft_id:$("draft_id").value});
-  const dname=(drafts.find(d=>d.id===$("draft_id").value)||{}).name||"";
-  $("pvDraft").textContent=dname;
+  const p=await api("/api/preview","POST",{recipient_id:selectedRid,draft_id:"custom"});
+  $("pvDraft").textContent="Composed proposal";
   $("pvAgency").textContent=p.agency||"sample";
   $("pvTo").textContent=p.to||"";
   $("pvSubj").textContent=p.subject;
-  $("pvBody").innerHTML=p.html;
+  const ifr=$("pvBody");
+  ifr.onload=()=>{ try{ ifr.style.height=(ifr.contentWindow.document.body.scrollHeight+24)+"px"; }catch(e){} };
+  ifr.srcdoc=p.html;
   $("pvFlags").innerHTML = (p.unresolved&&p.unresolved.length)
     ? `<div class="flag">⚠ Unfilled placeholders: ${p.unresolved.join(", ")} — fill these in settings before sending.</div>` : "";
 }
-$("draft_id").onchange=()=>{ saveSettings(); };
 
 // ---- controls ----
 $("startBtn").onclick=async()=>{ const r=await api("/api/start","POST"); r.ok?toast("Campaign started."):toast(r.error,true); refreshState(); };
@@ -367,7 +486,7 @@ async function refreshLog(){
 // ---- tabs ----
 function switchTab(name){
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
-  ["recipients","preview","log"].forEach(t=>$("tab-"+t).style.display=t===name?"":"none");
+  ["recipients","compose","preview","log"].forEach(t=>$("tab-"+t).style.display=t===name?"":"none");
   if(name==="preview") refreshPreview();
   if(name==="log") refreshLog();
 }
